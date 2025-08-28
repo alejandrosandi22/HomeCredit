@@ -55,7 +55,7 @@ export async function GET(
         WEEKDAY_APPR_PROCESS_START as weekdayApprProcessStart,
         HOUR_APPR_PROCESS_START as hourApprProcessStart,
         CreatedDate as createdDate
-      FROM Core.Applications_Final 
+      FROM Core.Applications
       WHERE SK_ID_CURR = @id
     `;
 
@@ -108,7 +108,7 @@ export async function PUT(
     existsRequest.input('id', sql.BigInt, id);
 
     const existsResult = await existsRequest.query<CountResult>(
-      `SELECT COUNT(*) as count FROM Core.Applications_Final WHERE SK_ID_CURR = @id`,
+      `SELECT COUNT(*) as count FROM Core.Applications WHERE SK_ID_CURR = @id`,
     );
 
     if (existsResult.recordset[0].count === 0) {
@@ -163,7 +163,7 @@ export async function PUT(
     updateRequest.input('whereId', sql.BigInt, id);
 
     const updateQuery = `
-      UPDATE Core.Applications_Final 
+      UPDATE Core.Applications 
       SET ${updateFields.join(', ')}
       WHERE SK_ID_CURR = @whereId
     `;
@@ -217,7 +217,7 @@ export async function DELETE(
     existsRequest.input('id', sql.BigInt, id);
 
     const existsResult = await existsRequest.query<CountResult>(
-      `SELECT COUNT(*) as count FROM Core.Applications_Final WHERE SK_ID_CURR = @id`,
+      `SELECT COUNT(*) as count FROM Core.Applications WHERE SK_ID_CURR = @id`,
     );
 
     if (existsResult.recordset[0].count === 0) {
@@ -232,7 +232,7 @@ export async function DELETE(
     deleteRequest.input('id', sql.BigInt, id);
 
     await deleteRequest.query(
-      `DELETE FROM Core.Applications_Final WHERE SK_ID_CURR = @id`,
+      `DELETE FROM Core.Applications WHERE SK_ID_CURR = @id`,
     );
 
     return NextResponse.json({

@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     // Count query
     const countQuery = `
       SELECT COUNT(*) as total 
-      FROM Core.Applications_Final 
+      FROM Core.Applications 
       ${whereClause}
     `;
 
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
           HOUR_APPR_PROCESS_START as hourApprProcessStart,
           CreatedDate as createdDate,
           ROW_NUMBER() OVER (ORDER BY SK_ID_CURR DESC) as RowNum
-        FROM Core.Applications_Final
+        FROM Core.Applications
         ${whereClause}
       )
       SELECT *
@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
     );
 
     const insertQuery = `
-      INSERT INTO Core.Applications_Final (
+      INSERT INTO Core.Applications (
         SK_ID_CURR, TARGET, NAME_CONTRACT_TYPE, CODE_GENDER,
         FLAG_OWN_CAR, FLAG_OWN_REALTY, CNT_CHILDREN,
         AMT_INCOME_TOTAL, AMT_CREDIT, AMT_ANNUITY, AMT_GOODS_PRICE,
