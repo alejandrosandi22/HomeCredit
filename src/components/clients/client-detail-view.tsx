@@ -2,6 +2,7 @@
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { formatDate } from '@/lib/utils';
 import { ApplicationsFinal } from '@/types';
 
 interface ClientDetailViewProps {
@@ -446,11 +447,7 @@ export default function ClientDetailView({ client }: ClientDetailViewProps) {
                 </div>
                 <div className='flex justify-between'>
                   <span className='text-muted-foreground'>Record Created:</span>
-                  <span>
-                    {client.createdDate
-                      ? client.createdDate.toDateString()
-                      : 'Unknown'}
-                  </span>
+                  <span>{formatDate(client.createdDate)}</span>
                 </div>
               </div>
             </div>

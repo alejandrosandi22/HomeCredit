@@ -27,6 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { formatDate } from '@/lib/utils';
 import { ApplicationsFinal } from '@/types';
 import { Edit, Eye, MoreHorizontal, Search, Trash2 } from 'lucide-react';
 import { useState } from 'react';
@@ -209,11 +210,7 @@ export default function ClientsTable({
                     <TableCell className='max-w-[150px] truncate'>
                       {client.occupationType || 'Not specified'}
                     </TableCell>
-                    <TableCell>
-                      {client.createdDate
-                        ? client.createdDate.toDateString()
-                        : 'N/A'}
-                    </TableCell>
+                    <TableCell>{formatDate(client.createdDate)}</TableCell>
                     <TableCell className='text-right'>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
