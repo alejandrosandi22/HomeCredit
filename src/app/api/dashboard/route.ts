@@ -1,9 +1,7 @@
-// src/app/api/dashboard/route.ts
 import { NextResponse } from 'next/server';
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 
-// Interfaces para los datos del dashboard
 interface DashboardData {
   loanDistribution: LoanDistributionItem[];
   defaultRiskAnalysis: DefaultRiskItem[];
@@ -87,18 +85,18 @@ export async function GET() {
 
     const queryRunner = dataSource.createQueryRunner();
 
-    // Verificar qué tablas tienen datos
+    // Fixed query - changed 'rows' to 'row_count'
     const availableTables = await queryRunner.query(`
       SELECT 
         SCHEMA_NAME(t.schema_id) as SchemaName,
         t.name as TableName,
-        p.rows as RecordCount
+        p.row_count as RecordCount
       FROM sys.tables t
       INNER JOIN sys.dm_db_partition_stats p ON t.object_id = p.object_id
       WHERE p.index_id IN (0,1)
         AND SCHEMA_NAME(t.schema_id) IN ('Core', 'CreditBureau', 'Payments')
-        AND p.rows > 0
-      ORDER BY p.rows DESC
+        AND p.row_count > 0
+      ORDER BY p.row_count DESC
     `);
 
     console.log('Dashboard API: Available tables with data:', availableTables);
@@ -131,7 +129,7 @@ export async function GET() {
       creditHistoryTableName,
     });
 
-    // Consulta 1: Distribución de Tipos de Préstamo
+    // Query 1: Loan Distribution
     console.log('Dashboard API: Executing Loan Distribution Query...');
     const loanDistribution = await queryRunner
       .query(
@@ -152,7 +150,7 @@ export async function GET() {
         return [];
       });
 
-    // Consulta 2: Análisis de Riesgo de Incumplimiento
+    // Query 2: Default Risk Analysis
     console.log('Dashboard API: Executing Default Risk Query...');
     const defaultRiskAnalysis = await queryRunner
       .query(
@@ -186,24 +184,31 @@ export async function GET() {
         return [];
       });
 
-    // Consulta 3: Tendencias de Crédito (usando datos disponibles o simulados)
+    // Query 3: Credit Amount Trends - Fixed to use actual date logic
     console.log('Dashboard API: Executing Credit Trends Query...');
     const creditAmountTrends = await queryRunner
       .query(
         `
-      SELECT TOP 12
-        FORMAT(DATEADD(MONTH, -ROW_NUMBER() OVER (ORDER BY COUNT(*)), GETDATE()), 'yyyy-MM') as month,
-        COUNT(*) as totalApplications,
-        CAST(AVG(TRY_CAST(AMT_CREDIT as DECIMAL)) as DECIMAL(15,2)) as avgCreditAmount,
-        CAST(SUM(TRY_CAST(AMT_CREDIT as DECIMAL)) as DECIMAL(18,2)) as totalCreditAmount
-      FROM ${applicationsTableName}
-      WHERE TRY_CAST(AMT_CREDIT as DECIMAL) > 0
-      GROUP BY NAME_CONTRACT_TYPE
-      ORDER BY month DESC
+      WITH MonthlyData AS (
+        SELECT 
+          FORMAT(DATEADD(MONTH, -n.num, GETDATE()), 'yyyy-MM') as month,
+          n.num as month_offset
+        FROM (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11)) n(num)
+      )
+      SELECT 
+        md.month,
+        ISNULL(COUNT(a.SK_ID_CURR), 0) as totalApplications,
+        CAST(ISNULL(AVG(TRY_CAST(a.AMT_CREDIT as DECIMAL)), 0) as DECIMAL(15,2)) as avgCreditAmount,
+        CAST(ISNULL(SUM(TRY_CAST(a.AMT_CREDIT as DECIMAL)), 0) as DECIMAL(18,2)) as totalCreditAmount
+      FROM MonthlyData md
+      LEFT JOIN ${applicationsTableName} a ON FORMAT(DATEADD(MONTH, -md.month_offset, GETDATE()), 'yyyy-MM') = md.month
+        AND TRY_CAST(a.AMT_CREDIT as DECIMAL) > 0
+      GROUP BY md.month, md.month_offset
+      ORDER BY md.month_offset
     `,
       )
       .catch(() => {
-        // Si falla, generar datos simulados
+        // Fallback data if query fails
         const months = [];
         for (let i = 11; i >= 0; i--) {
           const date = new Date();
@@ -218,7 +223,7 @@ export async function GET() {
         return months;
       });
 
-    // Consulta 4: Demographics
+    // Query 4: Demographics
     console.log('Dashboard API: Executing Demographics Query...');
     const applicantDemographics = await queryRunner
       .query(
@@ -238,15 +243,20 @@ export async function GET() {
       SELECT 
         'Car Ownership' as category,
         CASE 
-          WHEN FLAG_OWN_CAR = '1' THEN 'Owns Car'
-          WHEN FLAG_OWN_CAR = '0' THEN 'No Car'
+          WHEN FLAG_OWN_CAR = '1' OR FLAG_OWN_CAR = 1 THEN 'Owns Car'
+          WHEN FLAG_OWN_CAR = '0' OR FLAG_OWN_CAR = 0 THEN 'No Car'
           ELSE 'Unknown'
         END as subcategory,
         COUNT(*) as count,
         CAST(AVG(TRY_CAST(ISNULL(AMT_INCOME_TOTAL, '0') as DECIMAL)) as DECIMAL(15,2)) as avgIncome,
         CAST(AVG(TRY_CAST(ISNULL(TARGET, '0') as DECIMAL)) * 100 as DECIMAL(5,2)) as defaultRate
       FROM ${applicationsTableName}
-      GROUP BY FLAG_OWN_CAR
+      GROUP BY 
+        CASE 
+          WHEN FLAG_OWN_CAR = '1' OR FLAG_OWN_CAR = 1 THEN 'Owns Car'
+          WHEN FLAG_OWN_CAR = '0' OR FLAG_OWN_CAR = 0 THEN 'No Car'
+          ELSE 'Unknown'
+        END
       HAVING COUNT(*) > 10
       
       ORDER BY category, count DESC
@@ -257,7 +267,7 @@ export async function GET() {
         return [];
       });
 
-    // Consulta 5: Payment Behavior
+    // Query 5: Payment Behavior
     console.log('Dashboard API: Executing Payment Behavior Query...');
     let paymentBehavior: PaymentBehaviorItem[] = [];
 
@@ -301,7 +311,6 @@ export async function GET() {
         });
     }
 
-    // Si no hay datos de payment behavior, crear datos simulados
     if (!paymentBehavior || paymentBehavior.length === 0) {
       paymentBehavior = [
         {
@@ -339,7 +348,6 @@ export async function GET() {
 
     await queryRunner.release();
 
-    // Calcular tiempo de respuesta
     const endTime = Date.now();
     const executionTime = endTime - startTime;
 
@@ -411,7 +419,6 @@ export async function GET() {
       },
     );
   } finally {
-    // Limpiar la conexión
     if (dataSource && dataSource.isInitialized) {
       try {
         await dataSource.destroy();
