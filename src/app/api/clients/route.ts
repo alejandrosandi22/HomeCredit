@@ -32,7 +32,6 @@ export async function GET(request: NextRequest) {
       sqlRequest.input('search', sql.NVarChar, `%${search}%`);
     }
 
-    // Add pagination parameters
     sqlRequest.input('offset', sql.Int, offset);
     sqlRequest.input('limit', sql.Int, limit);
 
@@ -43,38 +42,41 @@ export async function GET(request: NextRequest) {
       ${whereClause}
     `;
 
-    // Data query with OFFSET/FETCH
+    // Data query con ROW_NUMBER para compatibilidad SQL Server 2014
     const dataQuery = `
-      SELECT
-        SK_ID_CURR as skIdCurr,
-        TARGET as target,
-        NAME_CONTRACT_TYPE as nameContractType,
-        CODE_GENDER as codeGender,
-        FLAG_OWN_CAR as flagOwnCar,
-        FLAG_OWN_REALTY as flagOwnRealty,
-        CNT_CHILDREN as cntChildren,
-        AMT_INCOME_TOTAL as amtIncomeTotal,
-        AMT_CREDIT as amtCredit,
-        AMT_ANNUITY as amtAnnuity,
-        AMT_GOODS_PRICE as amtGoodsPrice,
-        DAYS_BIRTH as daysBirth,
-        DAYS_EMPLOYED as daysEmployed,
-        OCCUPATION_TYPE as occupationType,
-        ORGANIZATION_TYPE as organizationType,
-        EXT_SOURCE_1 as extSource1,
-        EXT_SOURCE_2 as extSource2,
-        EXT_SOURCE_3 as extSource3,
-        WEEKDAY_APPR_PROCESS_START as weekdayApprProcessStart,
-        HOUR_APPR_PROCESS_START as hourApprProcessStart,
-        CreatedDate as createdDate
-      FROM Core.Applications_Final
-      ${whereClause}
-      ORDER BY SK_ID_CURR DESC
-      OFFSET @offset ROWS
-      FETCH NEXT @limit ROWS ONLY
+      WITH Clients AS (
+        SELECT
+          SK_ID_CURR as skIdCurr,
+          TARGET as target,
+          NAME_CONTRACT_TYPE as nameContractType,
+          CODE_GENDER as codeGender,
+          FLAG_OWN_CAR as flagOwnCar,
+          FLAG_OWN_REALTY as flagOwnRealty,
+          CNT_CHILDREN as cntChildren,
+          AMT_INCOME_TOTAL as amtIncomeTotal,
+          AMT_CREDIT as amtCredit,
+          AMT_ANNUITY as amtAnnuity,
+          AMT_GOODS_PRICE as amtGoodsPrice,
+          DAYS_BIRTH as daysBirth,
+          DAYS_EMPLOYED as daysEmployed,
+          OCCUPATION_TYPE as occupationType,
+          ORGANIZATION_TYPE as organizationType,
+          EXT_SOURCE_1 as extSource1,
+          EXT_SOURCE_2 as extSource2,
+          EXT_SOURCE_3 as extSource3,
+          WEEKDAY_APPR_PROCESS_START as weekdayApprProcessStart,
+          HOUR_APPR_PROCESS_START as hourApprProcessStart,
+          CreatedDate as createdDate,
+          ROW_NUMBER() OVER (ORDER BY SK_ID_CURR DESC) as RowNum
+        FROM Core.Applications_Final
+        ${whereClause}
+      )
+      SELECT *
+      FROM Clients
+      WHERE RowNum BETWEEN @offset + 1 AND @offset + @limit
+      ORDER BY RowNum
     `;
 
-    // Execute queries
     const countResult = await sqlRequest.query<CountResult>(countQuery);
     const dataResult = await sqlRequest.query<ApplicationsFinal>(dataQuery);
 
@@ -114,7 +116,7 @@ export async function POST(request: NextRequest) {
     const pool = await getConnection();
     const sqlRequest = pool.request();
 
-    // Add all parameters with proper types
+    // Parámetros tipados
     sqlRequest.input('skIdCurr', sql.BigInt, validatedData.skIdCurr);
     sqlRequest.input('target', sql.Int, validatedData.target);
     sqlRequest.input(

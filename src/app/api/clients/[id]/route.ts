@@ -8,10 +8,8 @@ interface CountResult {
   count: number;
 }
 
-// Type for the validated data entries
 type UpdateEntry = [string, string | number | null | undefined];
 
-// Helper function to convert camelCase to UPPER_SNAKE_CASE
 function camelToSnakeCase(str: string): string {
   return str.replace(/([A-Z])/g, '_$1').toUpperCase();
 }
@@ -70,11 +68,9 @@ export async function GET(
       );
     }
 
-    const client = result.recordset[0];
-
     return NextResponse.json({
       success: true,
-      data: client,
+      data: result.recordset[0],
     });
   } catch (error) {
     console.error('Error fetching client:', error);
@@ -126,13 +122,11 @@ export async function PUT(
     const updateRequest = pool.request();
     const updateFields: string[] = [];
 
-    // Process each field with proper typing
     Object.entries(validatedData).forEach(([key, value]: UpdateEntry) => {
       if (key !== 'skIdCurr' && value !== undefined && value !== null) {
         const dbField = camelToSnakeCase(key);
         updateFields.push(`${dbField} = @${key}`);
 
-        // Add parameter with appropriate SQL type based on the field
         switch (key) {
           case 'target':
           case 'cntChildren':
@@ -166,7 +160,6 @@ export async function PUT(
       );
     }
 
-    // Add ID parameter for WHERE clause
     updateRequest.input('whereId', sql.BigInt, id);
 
     const updateQuery = `
@@ -238,8 +231,9 @@ export async function DELETE(
     const deleteRequest = pool.request();
     deleteRequest.input('id', sql.BigInt, id);
 
-    const deleteQuery = `DELETE FROM Core.Applications_Final WHERE SK_ID_CURR = @id`;
-    await deleteRequest.query(deleteQuery);
+    await deleteRequest.query(
+      `DELETE FROM Core.Applications_Final WHERE SK_ID_CURR = @id`,
+    );
 
     return NextResponse.json({
       success: true,

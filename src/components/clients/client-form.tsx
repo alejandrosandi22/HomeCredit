@@ -80,7 +80,7 @@ export default function ClientForm({
           amtCredit: 0,
           amtAnnuity: 0,
           amtGoodsPrice: 0,
-          daysBirth: -9000, // Default to approximately 25 years old
+          daysBirth: -9000,
           daysEmployed: -1000,
           occupationType: '',
           organizationType: '',
@@ -98,14 +98,16 @@ export default function ClientForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className='space-y-6'>
-        <div className='grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3'>
+      <form onSubmit={form.handleSubmit(handleSubmit)} className='space-y-8'>
+        <div className='grid grid-cols-1 gap-8 lg:grid-cols-2'>
           {/* Basic Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Basic Information</CardTitle>
+          <Card className='rounded-2xl border shadow-sm'>
+            <CardHeader className='pb-4'>
+              <CardTitle className='text-lg font-semibold'>
+                Basic Information
+              </CardTitle>
             </CardHeader>
-            <CardContent className='space-y-4'>
+            <CardContent className='grid gap-6'>
               <FormField
                 control={form.control}
                 name='skIdCurr'
@@ -209,11 +211,13 @@ export default function ClientForm({
           </Card>
 
           {/* Financial Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Financial Information</CardTitle>
+          <Card className='rounded-2xl border shadow-sm'>
+            <CardHeader className='pb-4'>
+              <CardTitle className='text-lg font-semibold'>
+                Financial Information
+              </CardTitle>
             </CardHeader>
-            <CardContent className='space-y-4'>
+            <CardContent className='grid gap-6'>
               <FormField
                 control={form.control}
                 name='amtIncomeTotal'
@@ -313,11 +317,13 @@ export default function ClientForm({
           </Card>
 
           {/* Personal Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Personal Details</CardTitle>
+          <Card className='rounded-2xl border shadow-sm'>
+            <CardHeader className='pb-4'>
+              <CardTitle className='text-lg font-semibold'>
+                Personal Details
+              </CardTitle>
             </CardHeader>
-            <CardContent className='space-y-4'>
+            <CardContent className='grid gap-6'>
               <FormField
                 control={form.control}
                 name='cntChildren'
@@ -417,11 +423,13 @@ export default function ClientForm({
           </Card>
 
           {/* Employment Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Employment Information</CardTitle>
+          <Card className='rounded-2xl border shadow-sm'>
+            <CardHeader className='pb-4'>
+              <CardTitle className='text-lg font-semibold'>
+                Employment Information
+              </CardTitle>
             </CardHeader>
-            <CardContent className='space-y-4'>
+            <CardContent className='grid gap-6'>
               <FormField
                 control={form.control}
                 name='occupationType'
@@ -487,11 +495,13 @@ export default function ClientForm({
           </Card>
 
           {/* External Sources */}
-          <Card>
-            <CardHeader>
-              <CardTitle>External Credit Sources</CardTitle>
+          <Card className='rounded-2xl border shadow-sm'>
+            <CardHeader className='pb-4'>
+              <CardTitle className='text-lg font-semibold'>
+                External Credit Sources
+              </CardTitle>
             </CardHeader>
-            <CardContent className='space-y-4'>
+            <CardContent className='grid gap-6'>
               <FormField
                 control={form.control}
                 name='extSource1'
@@ -575,12 +585,14 @@ export default function ClientForm({
             </CardContent>
           </Card>
 
-          {/* Application Process Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Application Process</CardTitle>
+          {/* Application Process */}
+          <Card className='rounded-2xl border shadow-sm'>
+            <CardHeader className='pb-4'>
+              <CardTitle className='text-lg font-semibold'>
+                Application Process
+              </CardTitle>
             </CardHeader>
-            <CardContent className='space-y-4'>
+            <CardContent className='grid gap-6'>
               <FormField
                 control={form.control}
                 name='weekdayApprProcessStart'
@@ -638,8 +650,12 @@ export default function ClientForm({
           </Card>
         </div>
 
-        <div className='flex justify-end space-x-4'>
-          <Button type='submit' disabled={isLoading} className='min-w-[120px]'>
+        <div className='flex justify-end'>
+          <Button
+            type='submit'
+            disabled={isLoading}
+            className='min-w-[160px] rounded-xl shadow-md'
+          >
             {isLoading
               ? 'Saving...'
               : mode === 'create'
