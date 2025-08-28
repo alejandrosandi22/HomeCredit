@@ -1,70 +1,89 @@
+import { getConnection } from '@/lib/database';
 import { updateClientSchema } from '@/lib/validations/client';
-import { ClientStatus, type Client } from '@/types/client';
+import { ApplicationsFinal } from '@/types';
+import sql from 'mssql';
 import { NextRequest, NextResponse } from 'next/server';
 
-const mockClients: Client[] = [
-  {
-    id: '1',
-    firstName: 'Juan',
-    lastName: 'Pérez',
-    identification: '12345678901',
-    email: 'juan.perez@email.com',
-    phone: '+506 8888-8888',
-    address: 'San Jos�, Costa Rica',
-    dateOfBirth: new Date('1985-03-15'),
-    creditScore: 750,
-    status: ClientStatus.ACTIVE as const,
-    createdAt: new Date('2023-01-15'),
-    updatedAt: new Date('2023-01-15'),
-    loans: [],
-    payments: [],
-  },
-  {
-    id: '2',
-    firstName: 'María',
-    lastName: 'Gonz�lez',
-    identification: '98765432109',
-    email: 'maria.gonzalez@email.com',
-    phone: '+506 7777-7777',
-    address: 'Cartago, Costa Rica',
-    dateOfBirth: new Date('1990-07-22'),
-    creditScore: 680,
-    status: ClientStatus.ACTIVE as const,
-    createdAt: new Date('2023-02-10'),
-    updatedAt: new Date('2023-02-10'),
-    loans: [],
-    payments: [],
-  },
-];
+interface CountResult {
+  count: number;
+}
+
+// Type for the validated data entries
+type UpdateEntry = [string, string | number | null | undefined];
+
+// Helper function to convert camelCase to UPPER_SNAKE_CASE
+function camelToSnakeCase(str: string): string {
+  return str.replace(/([A-Z])/g, '_$1').toUpperCase();
+}
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } },
 ) {
   try {
-    const clientId = params.id;
-
-    if (!clientId) {
+    const id = parseInt(params.id);
+    if (isNaN(id)) {
       return NextResponse.json(
-        { error: 'ID del cliente es requerido' },
+        { success: false, error: 'Invalid client ID' },
         { status: 400 },
       );
     }
 
-    const client = mockClients.find((c) => c.id === clientId);
+    const pool = await getConnection();
+    const sqlRequest = pool.request();
 
-    if (!client) {
+    sqlRequest.input('id', sql.BigInt, id);
+
+    const query = `
+      SELECT 
+        SK_ID_CURR as skIdCurr,
+        TARGET as target,
+        NAME_CONTRACT_TYPE as nameContractType,
+        CODE_GENDER as codeGender,
+        FLAG_OWN_CAR as flagOwnCar,
+        FLAG_OWN_REALTY as flagOwnRealty,
+        CNT_CHILDREN as cntChildren,
+        AMT_INCOME_TOTAL as amtIncomeTotal,
+        AMT_CREDIT as amtCredit,
+        AMT_ANNUITY as amtAnnuity,
+        AMT_GOODS_PRICE as amtGoodsPrice,
+        DAYS_BIRTH as daysBirth,
+        DAYS_EMPLOYED as daysEmployed,
+        OCCUPATION_TYPE as occupationType,
+        ORGANIZATION_TYPE as organizationType,
+        EXT_SOURCE_1 as extSource1,
+        EXT_SOURCE_2 as extSource2,
+        EXT_SOURCE_3 as extSource3,
+        WEEKDAY_APPR_PROCESS_START as weekdayApprProcessStart,
+        HOUR_APPR_PROCESS_START as hourApprProcessStart,
+        CreatedDate as createdDate
+      FROM Core.Applications_Final 
+      WHERE SK_ID_CURR = @id
+    `;
+
+    const result = await sqlRequest.query<ApplicationsFinal>(query);
+
+    if (!result.recordset || result.recordset.length === 0) {
       return NextResponse.json(
-        { error: 'Cliente no encontrado' },
+        { success: false, error: 'Client not found' },
         { status: 404 },
       );
     }
 
-    return NextResponse.json(client);
+    const client = result.recordset[0];
+
+    return NextResponse.json({
+      success: true,
+      data: client,
+    });
   } catch (error) {
     console.error('Error fetching client:', error);
     return NextResponse.json(
-      { error: 'Error interno del servidor' },
+      {
+        success: false,
+        error: 'Error fetching client',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 },
     );
   }
@@ -75,47 +94,111 @@ export async function PUT(
   { params }: { params: { id: string } },
 ) {
   try {
-    const clientId = params.id;
-
-    if (!clientId) {
+    const id = parseInt(params.id);
+    if (isNaN(id)) {
       return NextResponse.json(
-        { error: 'ID del cliente es requerido' },
+        { success: false, error: 'Invalid client ID' },
         { status: 400 },
-      );
-    }
-
-    const clientIndex = mockClients.findIndex((c) => c.id === clientId);
-
-    if (clientIndex === -1) {
-      return NextResponse.json(
-        { error: 'Cliente no encontrado' },
-        { status: 404 },
       );
     }
 
     const body = await request.json();
-    const validatedData = updateClientSchema.parse(body);
+    const validatedData = updateClientSchema.parse({ ...body, skIdCurr: id });
 
-    const updatedClient: Client = {
-      ...mockClients[clientIndex],
-      ...validatedData,
-      status: validatedData.status as ClientStatus,
-      updatedAt: new Date(),
-    };
+    const pool = await getConnection();
 
-    mockClients[clientIndex] = updatedClient;
+    // Check if client exists
+    const existsRequest = pool.request();
+    existsRequest.input('id', sql.BigInt, id);
 
-    return NextResponse.json(updatedClient);
+    const existsResult = await existsRequest.query<CountResult>(
+      `SELECT COUNT(*) as count FROM Core.Applications_Final WHERE SK_ID_CURR = @id`,
+    );
+
+    if (existsResult.recordset[0].count === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Client not found' },
+        { status: 404 },
+      );
+    }
+
+    // Build update query with type-safe parameters
+    const updateRequest = pool.request();
+    const updateFields: string[] = [];
+
+    // Process each field with proper typing
+    Object.entries(validatedData).forEach(([key, value]: UpdateEntry) => {
+      if (key !== 'skIdCurr' && value !== undefined && value !== null) {
+        const dbField = camelToSnakeCase(key);
+        updateFields.push(`${dbField} = @${key}`);
+
+        // Add parameter with appropriate SQL type based on the field
+        switch (key) {
+          case 'target':
+          case 'cntChildren':
+          case 'daysBirth':
+          case 'daysEmployed':
+          case 'hourApprProcessStart':
+            updateRequest.input(key, sql.Int, value as number);
+            break;
+          case 'amtIncomeTotal':
+          case 'amtCredit':
+          case 'amtAnnuity':
+          case 'amtGoodsPrice':
+            updateRequest.input(key, sql.Decimal(18, 2), value as number);
+            break;
+          case 'extSource1':
+          case 'extSource2':
+          case 'extSource3':
+            updateRequest.input(key, sql.Decimal(10, 6), value as number);
+            break;
+          default:
+            updateRequest.input(key, sql.NVarChar, value as string);
+            break;
+        }
+      }
+    });
+
+    if (updateFields.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'No fields to update' },
+        { status: 400 },
+      );
+    }
+
+    // Add ID parameter for WHERE clause
+    updateRequest.input('whereId', sql.BigInt, id);
+
+    const updateQuery = `
+      UPDATE Core.Applications_Final 
+      SET ${updateFields.join(', ')}
+      WHERE SK_ID_CURR = @whereId
+    `;
+
+    await updateRequest.query(updateQuery);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Client updated successfully',
+    });
   } catch (error) {
     console.error('Error updating client:', error);
-    if (error instanceof Error && 'issues' in error) {
+    if (error instanceof Error && error.message.includes('Validation error')) {
       return NextResponse.json(
-        { error: 'Datos de entrada inv�lidos', details: error },
+        {
+          success: false,
+          error: 'Validation failed',
+          message: error.message,
+        },
         { status: 400 },
       );
     }
     return NextResponse.json(
-      { error: 'Error interno del servidor' },
+      {
+        success: false,
+        error: 'Error updating client',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 },
     );
   }
@@ -126,46 +209,66 @@ export async function DELETE(
   { params }: { params: { id: string } },
 ) {
   try {
-    const clientId = params.id;
-
-    if (!clientId) {
+    const id = parseInt(params.id);
+    if (isNaN(id)) {
       return NextResponse.json(
-        { error: 'ID del cliente es requerido' },
+        { success: false, error: 'Invalid client ID' },
         { status: 400 },
       );
     }
 
-    const clientIndex = mockClients.findIndex((c) => c.id === clientId);
+    const pool = await getConnection();
 
-    if (clientIndex === -1) {
+    // Check if client exists
+    const existsRequest = pool.request();
+    existsRequest.input('id', sql.BigInt, id);
+
+    const existsResult = await existsRequest.query<CountResult>(
+      `SELECT COUNT(*) as count FROM Core.Applications_Final WHERE SK_ID_CURR = @id`,
+    );
+
+    if (existsResult.recordset[0].count === 0) {
       return NextResponse.json(
-        { error: 'Cliente no encontrado' },
+        { success: false, error: 'Client not found' },
         { status: 404 },
       );
     }
 
-    // Check if client has active loans before deletion
-    const client = mockClients[clientIndex];
-    const hasActiveLoans = client.loans && client.loans.length > 0;
+    // Delete the client
+    const deleteRequest = pool.request();
+    deleteRequest.input('id', sql.BigInt, id);
 
-    if (hasActiveLoans) {
+    const deleteQuery = `DELETE FROM Core.Applications_Final WHERE SK_ID_CURR = @id`;
+    await deleteRequest.query(deleteQuery);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Client deleted successfully',
+    });
+  } catch (error) {
+    console.error('Error deleting client:', error);
+
+    if (
+      error instanceof Error &&
+      (error.message.includes('REFERENCE constraint') ||
+        error.message.includes('foreign key'))
+    ) {
       return NextResponse.json(
-        { error: 'No se puede eliminar un cliente con pr�stamos activos' },
+        {
+          success: false,
+          error: 'Cannot delete client',
+          message: 'Client has related records and cannot be deleted',
+        },
         { status: 409 },
       );
     }
 
-    // Remove client from mock database
-    mockClients.splice(clientIndex, 1);
-
     return NextResponse.json(
-      { message: 'Cliente eliminado exitosamente' },
-      { status: 200 },
-    );
-  } catch (error) {
-    console.error('Error deleting client:', error);
-    return NextResponse.json(
-      { error: 'Error interno del servidor' },
+      {
+        success: false,
+        error: 'Error deleting client',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 },
     );
   }

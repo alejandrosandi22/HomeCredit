@@ -1,6 +1,5 @@
+import { getConnection } from '@/lib/database';
 import { NextResponse } from 'next/server';
-import 'reflect-metadata';
-import { DataSource } from 'typeorm';
 
 interface DashboardData {
   loanDistribution: LoanDistributionItem[];
@@ -48,45 +47,16 @@ interface PaymentBehaviorItem {
 }
 
 export async function GET() {
-  let dataSource: DataSource | null = null;
-
   try {
     console.log('Dashboard API: Starting request...');
     const startTime = Date.now();
 
-    dataSource = new DataSource({
-      type: 'mssql',
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '1433', 10),
-      username: process.env.DB_USERNAME || '',
-      password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_NAME || '',
-      entities: [],
-      migrations: [],
-      subscribers: [],
-      synchronize: false,
-      logging: ['error'],
-      options: {
-        encrypt: true,
-        trustServerCertificate: true,
-        enableArithAbort: true,
-      },
-      pool: {
-        max: 10,
-        min: 0,
-        acquireTimeoutMillis: 60000,
-        idleTimeoutMillis: 600000,
-      },
-    });
-
-    console.log('Dashboard API: Initializing database connection...');
-    await dataSource.initialize();
+    console.log('Dashboard API: Getting database connection...');
+    const pool = await getConnection();
     console.log('Dashboard API: Database connection established');
 
-    const queryRunner = dataSource.createQueryRunner();
-
-    // Fixed query - changed 'rows' to 'row_count'
-    const availableTables = await queryRunner.query(`
+    // Get available tables with data
+    const availableTables = await pool.request().query(`
       SELECT 
         SCHEMA_NAME(t.schema_id) as SchemaName,
         t.name as TableName,
@@ -99,16 +69,19 @@ export async function GET() {
       ORDER BY p.row_count DESC
     `);
 
-    console.log('Dashboard API: Available tables with data:', availableTables);
+    console.log(
+      'Dashboard API: Available tables with data:',
+      availableTables.recordset,
+    );
 
-    const useApplicationsTable = availableTables.find(
+    const useApplicationsTable = availableTables.recordset.find(
       (t: { SchemaName: string; TableName: string }) =>
         t.SchemaName === 'Core' &&
         (t.TableName === 'Applications_Final' ||
           t.TableName === 'Applications'),
     );
 
-    const useCreditHistoryTable = availableTables.find(
+    const useCreditHistoryTable = availableTables.recordset.find(
       (t: { SchemaName: string; TableName: string }) =>
         t.SchemaName === 'CreditBureau' &&
         (t.TableName === 'CreditHistory_Final' ||
@@ -131,20 +104,22 @@ export async function GET() {
 
     // Query 1: Loan Distribution
     console.log('Dashboard API: Executing Loan Distribution Query...');
-    const loanDistribution = await queryRunner
+    const loanDistribution = await pool
+      .request()
       .query(
         `
-      SELECT 
-        ISNULL(NAME_CONTRACT_TYPE, 'Unknown') as contractType,
-        COUNT(*) as count,
-        CAST(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM ${applicationsTableName} WHERE AMT_CREDIT IS NOT NULL AND TRY_CAST(AMT_CREDIT AS DECIMAL) > 0) as DECIMAL(5,2)) as percentage,
-        CAST(AVG(TRY_CAST(AMT_CREDIT as DECIMAL)) as DECIMAL(15,2)) as avgAmount
-      FROM ${applicationsTableName}
-      WHERE TRY_CAST(AMT_CREDIT as DECIMAL) > 0
-      GROUP BY NAME_CONTRACT_TYPE
-      ORDER BY COUNT(*) DESC
-    `,
+        SELECT 
+          ISNULL(NAME_CONTRACT_TYPE, 'Unknown') as contractType,
+          COUNT(*) as count,
+          CAST(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM ${applicationsTableName} WHERE AMT_CREDIT IS NOT NULL AND TRY_CAST(AMT_CREDIT AS DECIMAL) > 0) as DECIMAL(5,2)) as percentage,
+          CAST(AVG(TRY_CAST(AMT_CREDIT as DECIMAL)) as DECIMAL(15,2)) as avgAmount
+        FROM ${applicationsTableName}
+        WHERE TRY_CAST(AMT_CREDIT as DECIMAL) > 0
+        GROUP BY NAME_CONTRACT_TYPE
+        ORDER BY COUNT(*) DESC
+      `,
       )
+      .then((result) => result.recordset)
       .catch((err) => {
         console.error('Loan Distribution Query Error:', err.message);
         return [];
@@ -152,61 +127,65 @@ export async function GET() {
 
     // Query 2: Default Risk Analysis
     console.log('Dashboard API: Executing Default Risk Query...');
-    const defaultRiskAnalysis = await queryRunner
+    const defaultRiskAnalysis = await pool
+      .request()
       .query(
         `
-      SELECT 
-        CASE 
-          WHEN TRY_CAST(AMT_INCOME_TOTAL as DECIMAL) <= 100000 THEN 'Low Income'
-          WHEN TRY_CAST(AMT_INCOME_TOTAL as DECIMAL) <= 300000 THEN 'Medium Income'
-          WHEN TRY_CAST(AMT_INCOME_TOTAL as DECIMAL) <= 500000 THEN 'High Income'
-          ELSE 'Very High Income'
-        END as riskCategory,
-        COUNT(*) as totalApplications,
-        SUM(TRY_CAST(ISNULL(TARGET, '0') as INT)) as defaulted,
-        CAST((SUM(TRY_CAST(ISNULL(TARGET, '0') as INT)) * 100.0 / COUNT(*)) as DECIMAL(5,2)) as defaultRate,
-        CAST(AVG(TRY_CAST(ISNULL(AMT_CREDIT, '0') as DECIMAL)) as DECIMAL(15,2)) as avgCreditAmount
-      FROM ${applicationsTableName}
-      WHERE TRY_CAST(AMT_INCOME_TOTAL as DECIMAL) > 0
-      GROUP BY 
-        CASE 
-          WHEN TRY_CAST(AMT_INCOME_TOTAL as DECIMAL) <= 100000 THEN 'Low Income'
-          WHEN TRY_CAST(AMT_INCOME_TOTAL as DECIMAL) <= 300000 THEN 'Medium Income'
-          WHEN TRY_CAST(AMT_INCOME_TOTAL as DECIMAL) <= 500000 THEN 'High Income'
-          ELSE 'Very High Income'
-        END
-      HAVING COUNT(*) > 0
-      ORDER BY COUNT(*) DESC
-    `,
+        SELECT 
+          CASE 
+            WHEN TRY_CAST(AMT_INCOME_TOTAL as DECIMAL) <= 100000 THEN 'Low Income'
+            WHEN TRY_CAST(AMT_INCOME_TOTAL as DECIMAL) <= 300000 THEN 'Medium Income'
+            WHEN TRY_CAST(AMT_INCOME_TOTAL as DECIMAL) <= 500000 THEN 'High Income'
+            ELSE 'Very High Income'
+          END as riskCategory,
+          COUNT(*) as totalApplications,
+          SUM(TRY_CAST(ISNULL(TARGET, '0') as INT)) as defaulted,
+          CAST((SUM(TRY_CAST(ISNULL(TARGET, '0') as INT)) * 100.0 / COUNT(*)) as DECIMAL(5,2)) as defaultRate,
+          CAST(AVG(TRY_CAST(ISNULL(AMT_CREDIT, '0') as DECIMAL)) as DECIMAL(15,2)) as avgCreditAmount
+        FROM ${applicationsTableName}
+        WHERE TRY_CAST(AMT_INCOME_TOTAL as DECIMAL) > 0
+        GROUP BY 
+          CASE 
+            WHEN TRY_CAST(AMT_INCOME_TOTAL as DECIMAL) <= 100000 THEN 'Low Income'
+            WHEN TRY_CAST(AMT_INCOME_TOTAL as DECIMAL) <= 300000 THEN 'Medium Income'
+            WHEN TRY_CAST(AMT_INCOME_TOTAL as DECIMAL) <= 500000 THEN 'High Income'
+            ELSE 'Very High Income'
+          END
+        HAVING COUNT(*) > 0
+        ORDER BY COUNT(*) DESC
+      `,
       )
+      .then((result) => result.recordset)
       .catch((err) => {
         console.error('Default Risk Query Error:', err.message);
         return [];
       });
 
-    // Query 3: Credit Amount Trends - Fixed to use actual date logic
+    // Query 3: Credit Amount Trends
     console.log('Dashboard API: Executing Credit Trends Query...');
-    const creditAmountTrends = await queryRunner
+    const creditAmountTrends = await pool
+      .request()
       .query(
         `
-      WITH MonthlyData AS (
+        WITH MonthlyData AS (
+          SELECT 
+            FORMAT(DATEADD(MONTH, -n.num, GETDATE()), 'yyyy-MM') as month,
+            n.num as month_offset
+          FROM (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11)) n(num)
+        )
         SELECT 
-          FORMAT(DATEADD(MONTH, -n.num, GETDATE()), 'yyyy-MM') as month,
-          n.num as month_offset
-        FROM (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11)) n(num)
+          md.month,
+          ISNULL(COUNT(a.SK_ID_CURR), 0) as totalApplications,
+          CAST(ISNULL(AVG(TRY_CAST(a.AMT_CREDIT as DECIMAL)), 0) as DECIMAL(15,2)) as avgCreditAmount,
+          CAST(ISNULL(SUM(TRY_CAST(a.AMT_CREDIT as DECIMAL)), 0) as DECIMAL(18,2)) as totalCreditAmount
+        FROM MonthlyData md
+        LEFT JOIN ${applicationsTableName} a ON FORMAT(DATEADD(MONTH, -md.month_offset, GETDATE()), 'yyyy-MM') = md.month
+          AND TRY_CAST(a.AMT_CREDIT as DECIMAL) > 0
+        GROUP BY md.month, md.month_offset
+        ORDER BY md.month_offset
+      `,
       )
-      SELECT 
-        md.month,
-        ISNULL(COUNT(a.SK_ID_CURR), 0) as totalApplications,
-        CAST(ISNULL(AVG(TRY_CAST(a.AMT_CREDIT as DECIMAL)), 0) as DECIMAL(15,2)) as avgCreditAmount,
-        CAST(ISNULL(SUM(TRY_CAST(a.AMT_CREDIT as DECIMAL)), 0) as DECIMAL(18,2)) as totalCreditAmount
-      FROM MonthlyData md
-      LEFT JOIN ${applicationsTableName} a ON FORMAT(DATEADD(MONTH, -md.month_offset, GETDATE()), 'yyyy-MM') = md.month
-        AND TRY_CAST(a.AMT_CREDIT as DECIMAL) > 0
-      GROUP BY md.month, md.month_offset
-      ORDER BY md.month_offset
-    `,
-      )
+      .then((result) => result.recordset)
       .catch(() => {
         // Fallback data if query fails
         const months = [];
@@ -225,43 +204,45 @@ export async function GET() {
 
     // Query 4: Demographics
     console.log('Dashboard API: Executing Demographics Query...');
-    const applicantDemographics = await queryRunner
+    const applicantDemographics = await pool
+      .request()
       .query(
         `
-      SELECT 
-        'Gender' as category,
-        ISNULL(CODE_GENDER, 'Unknown') as subcategory,
-        COUNT(*) as count,
-        CAST(AVG(TRY_CAST(ISNULL(AMT_INCOME_TOTAL, '0') as DECIMAL)) as DECIMAL(15,2)) as avgIncome,
-        CAST(AVG(TRY_CAST(ISNULL(TARGET, '0') as DECIMAL)) * 100 as DECIMAL(5,2)) as defaultRate
-      FROM ${applicationsTableName}
-      GROUP BY CODE_GENDER
-      HAVING COUNT(*) > 10
-      
-      UNION ALL
-      
-      SELECT 
-        'Car Ownership' as category,
-        CASE 
-          WHEN FLAG_OWN_CAR = '1' OR FLAG_OWN_CAR = 1 THEN 'Owns Car'
-          WHEN FLAG_OWN_CAR = '0' OR FLAG_OWN_CAR = 0 THEN 'No Car'
-          ELSE 'Unknown'
-        END as subcategory,
-        COUNT(*) as count,
-        CAST(AVG(TRY_CAST(ISNULL(AMT_INCOME_TOTAL, '0') as DECIMAL)) as DECIMAL(15,2)) as avgIncome,
-        CAST(AVG(TRY_CAST(ISNULL(TARGET, '0') as DECIMAL)) * 100 as DECIMAL(5,2)) as defaultRate
-      FROM ${applicationsTableName}
-      GROUP BY 
-        CASE 
-          WHEN FLAG_OWN_CAR = '1' OR FLAG_OWN_CAR = 1 THEN 'Owns Car'
-          WHEN FLAG_OWN_CAR = '0' OR FLAG_OWN_CAR = 0 THEN 'No Car'
-          ELSE 'Unknown'
-        END
-      HAVING COUNT(*) > 10
-      
-      ORDER BY category, count DESC
-    `,
+        SELECT 
+          'Gender' as category,
+          ISNULL(CODE_GENDER, 'Unknown') as subcategory,
+          COUNT(*) as count,
+          CAST(AVG(TRY_CAST(ISNULL(AMT_INCOME_TOTAL, '0') as DECIMAL)) as DECIMAL(15,2)) as avgIncome,
+          CAST(AVG(TRY_CAST(ISNULL(TARGET, '0') as DECIMAL)) * 100 as DECIMAL(5,2)) as defaultRate
+        FROM ${applicationsTableName}
+        GROUP BY CODE_GENDER
+        HAVING COUNT(*) > 10
+        
+        UNION ALL
+        
+        SELECT 
+          'Car Ownership' as category,
+          CASE 
+            WHEN FLAG_OWN_CAR = '1' OR FLAG_OWN_CAR = 1 THEN 'Owns Car'
+            WHEN FLAG_OWN_CAR = '0' OR FLAG_OWN_CAR = 0 THEN 'No Car'
+            ELSE 'Unknown'
+          END as subcategory,
+          COUNT(*) as count,
+          CAST(AVG(TRY_CAST(ISNULL(AMT_INCOME_TOTAL, '0') as DECIMAL)) as DECIMAL(15,2)) as avgIncome,
+          CAST(AVG(TRY_CAST(ISNULL(TARGET, '0') as DECIMAL)) * 100 as DECIMAL(5,2)) as defaultRate
+        FROM ${applicationsTableName}
+        GROUP BY 
+          CASE 
+            WHEN FLAG_OWN_CAR = '1' OR FLAG_OWN_CAR = 1 THEN 'Owns Car'
+            WHEN FLAG_OWN_CAR = '0' OR FLAG_OWN_CAR = 0 THEN 'No Car'
+            ELSE 'Unknown'
+          END
+        HAVING COUNT(*) > 10
+        
+        ORDER BY category, count DESC
+      `,
       )
+      .then((result) => result.recordset)
       .catch((err) => {
         console.error('Demographics Query Error:', err.message);
         return [];
@@ -272,39 +253,41 @@ export async function GET() {
     let paymentBehavior: PaymentBehaviorItem[] = [];
 
     if (creditHistoryTableName) {
-      paymentBehavior = await queryRunner
+      paymentBehavior = await pool
+        .request()
         .query(
           `
-        SELECT 
-          paymentStatus,
-          COUNT(*) as count,
-          CAST(AVG(TRY_CAST(ISNULL(CREDIT_DAY_OVERDUE, '0') as DECIMAL)) as DECIMAL(8,2)) as avgDaysOverdue,
-          CAST(SUM(TRY_CAST(ISNULL(AMT_CREDIT_SUM_DEBT, '0') as DECIMAL)) as DECIMAL(18,2)) as totalDebtAmount,
-          statusOrder
-        FROM (
           SELECT 
-            CASE 
-              WHEN TRY_CAST(ISNULL(CREDIT_DAY_OVERDUE, '0') as INT) = 0 THEN 'On Time'
-              WHEN TRY_CAST(CREDIT_DAY_OVERDUE as INT) <= 30 THEN '1-30 Days Late'
-              WHEN TRY_CAST(CREDIT_DAY_OVERDUE as INT) <= 90 THEN '31-90 Days Late'
-              WHEN TRY_CAST(CREDIT_DAY_OVERDUE as INT) <= 180 THEN '91-180 Days Late'
-              ELSE 'Over 180 Days Late'
-            END as paymentStatus,
-            CASE 
-              WHEN TRY_CAST(ISNULL(CREDIT_DAY_OVERDUE, '0') as INT) = 0 THEN 1
-              WHEN TRY_CAST(CREDIT_DAY_OVERDUE as INT) <= 30 THEN 2
-              WHEN TRY_CAST(CREDIT_DAY_OVERDUE as INT) <= 90 THEN 3
-              WHEN TRY_CAST(CREDIT_DAY_OVERDUE as INT) <= 180 THEN 4
-              ELSE 5
-            END as statusOrder,
-            CREDIT_DAY_OVERDUE,
-            AMT_CREDIT_SUM_DEBT
-          FROM ${creditHistoryTableName}
-        ) grouped
-        GROUP BY paymentStatus, statusOrder
-        ORDER BY statusOrder
-      `,
+            paymentStatus,
+            COUNT(*) as count,
+            CAST(AVG(TRY_CAST(ISNULL(CREDIT_DAY_OVERDUE, '0') as DECIMAL)) as DECIMAL(8,2)) as avgDaysOverdue,
+            CAST(SUM(TRY_CAST(ISNULL(AMT_CREDIT_SUM_DEBT, '0') as DECIMAL)) as DECIMAL(18,2)) as totalDebtAmount,
+            statusOrder
+          FROM (
+            SELECT 
+              CASE 
+                WHEN TRY_CAST(ISNULL(CREDIT_DAY_OVERDUE, '0') as INT) = 0 THEN 'On Time'
+                WHEN TRY_CAST(CREDIT_DAY_OVERDUE as INT) <= 30 THEN '1-30 Days Late'
+                WHEN TRY_CAST(CREDIT_DAY_OVERDUE as INT) <= 90 THEN '31-90 Days Late'
+                WHEN TRY_CAST(CREDIT_DAY_OVERDUE as INT) <= 180 THEN '91-180 Days Late'
+                ELSE 'Over 180 Days Late'
+              END as paymentStatus,
+              CASE 
+                WHEN TRY_CAST(ISNULL(CREDIT_DAY_OVERDUE, '0') as INT) = 0 THEN 1
+                WHEN TRY_CAST(CREDIT_DAY_OVERDUE as INT) <= 30 THEN 2
+                WHEN TRY_CAST(CREDIT_DAY_OVERDUE as INT) <= 90 THEN 3
+                WHEN TRY_CAST(CREDIT_DAY_OVERDUE as INT) <= 180 THEN 4
+                ELSE 5
+              END as statusOrder,
+              CREDIT_DAY_OVERDUE,
+              AMT_CREDIT_SUM_DEBT
+            FROM ${creditHistoryTableName}
+          ) grouped
+          GROUP BY paymentStatus, statusOrder
+          ORDER BY statusOrder
+        `,
         )
+        .then((result) => result.recordset)
         .catch((err) => {
           console.error('Payment Behavior Query Error:', err.message);
           return [];
@@ -345,8 +328,6 @@ export async function GET() {
         },
       ];
     }
-
-    await queryRunner.release();
 
     const endTime = Date.now();
     const executionTime = endTime - startTime;
@@ -418,14 +399,5 @@ export async function GET() {
         status: 500,
       },
     );
-  } finally {
-    if (dataSource && dataSource.isInitialized) {
-      try {
-        await dataSource.destroy();
-        console.log('Dashboard API: Connection closed');
-      } catch (closeError) {
-        console.error('Error closing connection:', closeError);
-      }
-    }
   }
 }

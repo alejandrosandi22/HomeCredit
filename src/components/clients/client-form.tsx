@@ -1,22 +1,15 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -24,264 +17,634 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { cn } from '@/lib/utils';
 import {
+  CreateClientData,
+  UpdateClientData,
   createClientSchema,
   updateClientSchema,
-  type CreateClientFormData,
-  type UpdateClientFormData,
 } from '@/lib/validations/client';
-import { ClientStatus, type Client } from '@/types/client';
+import { ApplicationsFinal } from '@/types';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
-import { CalendarIcon, Loader2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
+import { Input } from '../ui/input';
 
 interface ClientFormProps {
-  client?: Client;
-  onSubmit: (
-    data: CreateClientFormData | UpdateClientFormData,
-  ) => Promise<void>;
-  onCancel: () => void;
+  client?: ApplicationsFinal;
+  onSubmit: (data: CreateClientData | UpdateClientData) => Promise<void>;
   isLoading?: boolean;
+  mode: 'create' | 'edit';
 }
 
 export default function ClientForm({
   client,
   onSubmit,
-  onCancel,
   isLoading = false,
+  mode,
 }: ClientFormProps) {
-  const isEditing = Boolean(client);
-  const schema = isEditing ? updateClientSchema : createClientSchema;
-
-  const form = useForm<CreateClientFormData | UpdateClientFormData>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      firstName: client?.firstName || '',
-      lastName: client?.lastName || '',
-      identification: client?.identification || '',
-      email: client?.email || '',
-      phone: client?.phone || '',
-      address: client?.address || '',
-      dateOfBirth: client?.dateOfBirth || undefined,
-      ...(isEditing && { status: client?.status }),
-    },
+  const form = useForm<CreateClientData | UpdateClientData>({
+    resolver: zodResolver(
+      mode === 'create' ? createClientSchema : updateClientSchema,
+    ),
+    defaultValues: client
+      ? {
+          skIdCurr: client.skIdCurr,
+          target: client.target,
+          nameContractType: client.nameContractType,
+          codeGender: client.codeGender as 'M' | 'F' | 'XNA' | null,
+          flagOwnCar: client.flagOwnCar,
+          flagOwnRealty: client.flagOwnRealty,
+          cntChildren: client.cntChildren,
+          amtIncomeTotal: client.amtIncomeTotal,
+          amtCredit: client.amtCredit,
+          amtAnnuity: client.amtAnnuity,
+          amtGoodsPrice: client.amtGoodsPrice,
+          daysBirth: client.daysBirth,
+          daysEmployed: client.daysEmployed,
+          occupationType: client.occupationType,
+          organizationType: client.organizationType,
+          extSource1: client.extSource1,
+          extSource2: client.extSource2,
+          extSource3: client.extSource3,
+          weekdayApprProcessStart: client.weekdayApprProcessStart,
+          hourApprProcessStart: client.hourApprProcessStart,
+        }
+      : {
+          skIdCurr: undefined,
+          target: 0,
+          nameContractType: '',
+          codeGender: 'M',
+          flagOwnCar: 0,
+          flagOwnRealty: 0,
+          cntChildren: 0,
+          amtIncomeTotal: 0,
+          amtCredit: 0,
+          amtAnnuity: 0,
+          amtGoodsPrice: 0,
+          daysBirth: -9000, // Default to approximately 25 years old
+          daysEmployed: -1000,
+          occupationType: '',
+          organizationType: '',
+          extSource1: null,
+          extSource2: null,
+          extSource3: null,
+          weekdayApprProcessStart: 'MONDAY',
+          hourApprProcessStart: 10,
+        },
   });
 
-  const handleSubmit = async (
-    data: CreateClientFormData | UpdateClientFormData,
-  ) => {
-    try {
-      await onSubmit(data);
-    } catch (error) {
-      console.error('Error submitting form:', error);
-    }
+  const handleSubmit = async (data: CreateClientData | UpdateClientData) => {
+    await onSubmit(data);
   };
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit)} className='space-y-6'>
-        <div className='grid grid-cols-1 gap-6 md:grid-cols-2'>
-          {/* First Name */}
-          <FormField
-            control={form.control}
-            name='firstName'
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Nombre *</FormLabel>
-                <FormControl>
-                  <Input placeholder='Juan' {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Last Name */}
-          <FormField
-            control={form.control}
-            name='lastName'
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Apellidos *</FormLabel>
-                <FormControl>
-                  <Input placeholder='Pérez González' {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Identification */}
-          <FormField
-            control={form.control}
-            name='identification'
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Identificación *</FormLabel>
-                <FormControl>
-                  <Input placeholder='123456789' {...field} />
-                </FormControl>
-                <FormDescription>Número de cédula o pasaporte</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Email */}
-          <FormField
-            control={form.control}
-            name='email'
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Email *</FormLabel>
-                <FormControl>
-                  <Input
-                    type='email'
-                    placeholder='juan.perez@email.com'
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Phone */}
-          <FormField
-            control={form.control}
-            name='phone'
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Teléfono *</FormLabel>
-                <FormControl>
-                  <Input placeholder='+506 8888-8888' {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Date of Birth */}
-          <FormField
-            control={form.control}
-            name='dateOfBirth'
-            render={({ field }) => (
-              <FormItem className='flex flex-col'>
-                <FormLabel>Fecha de Nacimiento *</FormLabel>
-                <Popover>
-                  <PopoverTrigger asChild>
+        <div className='grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3'>
+          {/* Basic Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Basic Information</CardTitle>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              <FormField
+                control={form.control}
+                name='skIdCurr'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Client ID</FormLabel>
                     <FormControl>
-                      <Button
-                        variant={'outline'}
-                        className={cn(
-                          'w-full pl-3 text-left font-normal',
-                          !field.value && 'text-muted-foreground',
-                        )}
-                      >
-                        {field.value ? (
-                          format(field.value, 'PPP', { locale: es })
-                        ) : (
-                          <span>Selecciona una fecha</span>
-                        )}
-                        <CalendarIcon className='ml-auto h-4 w-4 opacity-50' />
-                      </Button>
+                      <Input
+                        type='number'
+                        placeholder='Enter client ID'
+                        disabled={mode === 'edit'}
+                        {...field}
+                        onChange={(e) =>
+                          field.onChange(parseInt(e.target.value) || undefined)
+                        }
+                      />
                     </FormControl>
-                  </PopoverTrigger>
-                  <PopoverContent className='w-auto p-0' align='start'>
-                    <Calendar
-                      mode='single'
-                      selected={field.value}
-                      onSelect={field.onChange}
-                      disabled={(date) =>
-                        date > new Date() || date < new Date('1900-01-01')
-                      }
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-                <FormDescription>
-                  El cliente debe ser mayor de 18 años
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          {/* Status (only for editing) */}
-          {isEditing && (
-            <FormField
-              control={form.control}
-              name='status'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Estado</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+              <FormField
+                control={form.control}
+                name='codeGender'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Gender</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value || undefined}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder='Select gender' />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value='M'>Male</SelectItem>
+                        <SelectItem value='F'>Female</SelectItem>
+                        <SelectItem value='XNA'>Not Available</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='nameContractType'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contract Type</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value || undefined}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder='Select contract type' />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value='Cash loans'>Cash loans</SelectItem>
+                        <SelectItem value='Revolving loans'>
+                          Revolving loans
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='target'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Target (Default Risk)</FormLabel>
+                    <Select
+                      onValueChange={(value) => field.onChange(parseInt(value))}
+                      defaultValue={field.value?.toString()}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder='Select target' />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value='0'>No Default (0)</SelectItem>
+                        <SelectItem value='1'>Default (1)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Financial Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Financial Information</CardTitle>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              <FormField
+                control={form.control}
+                name='amtIncomeTotal'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Total Income</FormLabel>
                     <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder='Seleccionar estado' />
-                      </SelectTrigger>
+                      <Input
+                        type='number'
+                        placeholder='Enter total income'
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) =>
+                          field.onChange(
+                            parseFloat(e.target.value) || undefined,
+                          )
+                        }
+                      />
                     </FormControl>
-                    <SelectContent>
-                      <SelectItem value={ClientStatus.ACTIVE}>
-                        Activo
-                      </SelectItem>
-                      <SelectItem value={ClientStatus.INACTIVE}>
-                        Inactivo
-                      </SelectItem>
-                      <SelectItem value={ClientStatus.SUSPENDED}>
-                        Suspendido
-                      </SelectItem>
-                      <SelectItem value={ClientStatus.PENDING}>
-                        Pendiente
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='amtCredit'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Credit Amount</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        placeholder='Enter credit amount'
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) =>
+                          field.onChange(
+                            parseFloat(e.target.value) || undefined,
+                          )
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='amtAnnuity'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Loan Annuity</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        placeholder='Enter loan annuity'
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) =>
+                          field.onChange(
+                            parseFloat(e.target.value) || undefined,
+                          )
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='amtGoodsPrice'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Goods Price</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        placeholder='Enter goods price'
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) =>
+                          field.onChange(
+                            parseFloat(e.target.value) || undefined,
+                          )
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Personal Details */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Personal Details</CardTitle>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              <FormField
+                control={form.control}
+                name='cntChildren'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Number of Children</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        min='0'
+                        max='20'
+                        placeholder='Enter number of children'
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) =>
+                          field.onChange(parseInt(e.target.value) || undefined)
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='flagOwnCar'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Owns Car</FormLabel>
+                    <Select
+                      onValueChange={(value) => field.onChange(parseInt(value))}
+                      defaultValue={field.value?.toString()}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder='Select car ownership' />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value='0'>No</SelectItem>
+                        <SelectItem value='1'>Yes</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='flagOwnRealty'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Owns Realty</FormLabel>
+                    <Select
+                      onValueChange={(value) => field.onChange(parseInt(value))}
+                      defaultValue={field.value?.toString()}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder='Select realty ownership' />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value='0'>No</SelectItem>
+                        <SelectItem value='1'>Yes</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='daysBirth'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Days Birth (Negative Value)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        placeholder='e.g., -9000 for ~25 years old'
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) =>
+                          field.onChange(parseInt(e.target.value) || undefined)
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Employment Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Employment Information</CardTitle>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              <FormField
+                control={form.control}
+                name='occupationType'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Occupation Type</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder='e.g., Laborers, Core staff, etc.'
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) => field.onChange(e.target.value || null)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='organizationType'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Organization Type</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder='e.g., Business Entity Type 3, etc.'
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) =>
+                          field.onChange(e.target.value || undefined)
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='daysEmployed'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Days Employed (Negative Value)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        placeholder='e.g., -1000 for ~3 years employed'
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) =>
+                          field.onChange(parseInt(e.target.value) || undefined)
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          {/* External Sources */}
+          <Card>
+            <CardHeader>
+              <CardTitle>External Credit Sources</CardTitle>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              <FormField
+                control={form.control}
+                name='extSource1'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>External Source 1 (0-1)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        step='0.01'
+                        min='0'
+                        max='1'
+                        placeholder='0.0 - 1.0'
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) =>
+                          field.onChange(
+                            parseFloat(e.target.value) || undefined,
+                          )
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='extSource2'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>External Source 2 (0-1)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        step='0.01'
+                        min='0'
+                        max='1'
+                        placeholder='0.0 - 1.0'
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) =>
+                          field.onChange(
+                            parseFloat(e.target.value) || undefined,
+                          )
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='extSource3'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>External Source 3 (0-1)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        step='0.01'
+                        min='0'
+                        max='1'
+                        placeholder='0.0 - 1.0'
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) =>
+                          field.onChange(
+                            parseFloat(e.target.value) || undefined,
+                          )
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Application Process Details */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Application Process</CardTitle>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              <FormField
+                control={form.control}
+                name='weekdayApprProcessStart'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Application Weekday</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value || undefined}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder='Select weekday' />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value='MONDAY'>Monday</SelectItem>
+                        <SelectItem value='TUESDAY'>Tuesday</SelectItem>
+                        <SelectItem value='WEDNESDAY'>Wednesday</SelectItem>
+                        <SelectItem value='THURSDAY'>Thursday</SelectItem>
+                        <SelectItem value='FRIDAY'>Friday</SelectItem>
+                        <SelectItem value='SATURDAY'>Saturday</SelectItem>
+                        <SelectItem value='SUNDAY'>Sunday</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='hourApprProcessStart'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Application Hour (0-23)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        min='0'
+                        max='23'
+                        placeholder='e.g., 10 for 10 AM'
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) =>
+                          field.onChange(parseInt(e.target.value) || undefined)
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Address */}
-        <FormField
-          control={form.control}
-          name='address'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Dirección *</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder='Dirección completa del cliente'
-                  className='resize-none'
-                  {...field}
-                />
-              </FormControl>
-              <FormDescription>
-                Incluya provincia, cantón, distrito y señas específicas
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Form Actions */}
-        <div className='flex justify-end space-x-2 border-t pt-6'>
-          <Button
-            type='button'
-            variant='outline'
-            onClick={onCancel}
-            disabled={isLoading}
-          >
-            Cancelar
-          </Button>
-          <Button type='submit' disabled={isLoading}>
-            {isLoading && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
-            {isEditing ? 'Actualizar Cliente' : 'Crear Cliente'}
+        <div className='flex justify-end space-x-4'>
+          <Button type='submit' disabled={isLoading} className='min-w-[120px]'>
+            {isLoading
+              ? 'Saving...'
+              : mode === 'create'
+                ? 'Create Client'
+                : 'Update Client'}
           </Button>
         </div>
       </form>

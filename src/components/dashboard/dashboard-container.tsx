@@ -14,7 +14,6 @@ import {
   BarChart3,
   CreditCard,
   RefreshCw,
-  TestTube,
   TrendingUp,
   Users,
 } from 'lucide-react';
@@ -61,21 +60,17 @@ interface DashboardData {
   }>;
 }
 
-export default function DashboardMockTest() {
+export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [executionTime, setExecutionTime] = useState<string | null>(null);
-  const [source, setSource] = useState<string>('mock');
 
-  const fetchData = async (endpoint: string) => {
+  const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const startTime = performance.now();
-
-      const response = await fetch(endpoint);
+      const response = await fetch('/api/dashboard');
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -87,12 +82,7 @@ export default function DashboardMockTest() {
         throw new Error(result.error || 'Failed to fetch dashboard data');
       }
 
-      const endTime = performance.now();
-      const clientExecutionTime = `${Math.round(endTime - startTime)}ms`;
-
       setData(result.data || null);
-      setExecutionTime(result.metadata?.executionTime || clientExecutionTime);
-      setSource(result.metadata?.source || 'unknown');
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Unknown error occurred';
@@ -104,18 +94,13 @@ export default function DashboardMockTest() {
   };
 
   useEffect(() => {
-    fetchData('/api/dashboard');
+    fetchData();
   }, []);
-
-  const handleSourceToggle = (endpoint: string, sourceType: string) => {
-    setSource(sourceType);
-    fetchData(endpoint);
-  };
 
   if (loading) {
     return (
       <div className='flex min-h-screen items-center justify-center'>
-        <LoadingSpinner size='large' text='Loading mock dashboard...' />
+        <LoadingSpinner size='large' text='Loading dashboard...' />
       </div>
     );
   }
@@ -127,13 +112,9 @@ export default function DashboardMockTest() {
           <AlertTriangle className='h-4 w-4' />
           <AlertDescription>Error loading dashboard: {error}</AlertDescription>
         </Alert>
-        <Button
-          onClick={() => fetchData('/api/dashboard-mock')}
-          className='mt-4'
-          variant='outline'
-        >
+        <Button onClick={fetchData} className='mt-4' variant='outline'>
           <RefreshCw className='mr-2 h-4 w-4' />
-          Retry Mock Data
+          Retry
         </Button>
       </div>
     );
@@ -151,68 +132,21 @@ export default function DashboardMockTest() {
 
   return (
     <div className='min-h-screen space-y-6 bg-gray-50 p-6'>
-      {/* Header with Data Source Toggle */}
+      {/* Header */}
       <div className='flex items-center justify-between'>
         <div>
           <h1 className='text-3xl font-bold tracking-tight text-gray-900'>
-            Home Credit Dashboard{' '}
-            {source === 'mock' ? '(Mock Data)' : '(Real Data)'}
+            Home Credit Dashboard
           </h1>
           <p className='mt-1 text-gray-600'>
             Credit risk analysis and loan performance metrics
           </p>
         </div>
-        <div className='flex items-center gap-4'>
-          <div className='flex gap-2'>
-            <Button
-              onClick={() => handleSourceToggle('/api/dashboard-mock', 'mock')}
-              variant={source === 'mock' ? 'default' : 'outline'}
-              size='sm'
-            >
-              <TestTube className='mr-2 h-4 w-4' />
-              Mock Data
-            </Button>
-            <Button
-              onClick={() => handleSourceToggle('/api/dashboard', 'real')}
-              variant={source === 'real' ? 'default' : 'outline'}
-              size='sm'
-            >
-              <BarChart3 className='mr-2 h-4 w-4' />
-              Real Data
-            </Button>
-          </div>
-          {executionTime && (
-            <div className='rounded-md border bg-white px-3 py-1 text-sm text-gray-500'>
-              Load time: {executionTime}
-            </div>
-          )}
-          <Button
-            onClick={() =>
-              fetchData(
-                source === 'mock' ? '/api/dashboard-mock' : '/api/dashboard',
-              )
-            }
-            variant='outline'
-            size='sm'
-          >
-            <RefreshCw className='mr-2 h-4 w-4' />
-            Refresh
-          </Button>
-        </div>
+        <Button onClick={fetchData} variant='outline' size='sm'>
+          <RefreshCw className='mr-2 h-4 w-4' />
+          Refresh
+        </Button>
       </div>
-
-      {/* Data Source Indicator */}
-      <Alert
-        className={`${source === 'mock' ? 'border-blue-200 bg-blue-50' : 'border-green-200 bg-green-50'}`}
-      >
-        <AlertDescription
-          className={`${source === 'mock' ? 'text-blue-800' : 'text-green-800'}`}
-        >
-          {source === 'mock'
-            ? 'Currently showing realistic mock data to test dashboard components functionality.'
-            : 'Currently showing real data from your database.'}
-        </AlertDescription>
-      </Alert>
 
       {/* Key Metrics Summary */}
       <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4'>
@@ -384,70 +318,9 @@ export default function DashboardMockTest() {
         </Card>
       </div>
 
-      {/* Test Results Summary */}
-      <Card className='border-2 border-blue-200'>
-        <CardHeader>
-          <CardTitle className='text-blue-800'>
-            Component Test Results
-          </CardTitle>
-          <CardDescription>
-            Summary of dashboard component functionality
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className='grid grid-cols-1 gap-4 text-sm md:grid-cols-3'>
-            <div className='space-y-2'>
-              <h4 className='font-medium'>Data Loading</h4>
-              <ul className='space-y-1 text-gray-600'>
-                <li>✅ API Connection: Working</li>
-                <li>✅ Error Handling: Working</li>
-                <li>✅ Loading States: Working</li>
-              </ul>
-            </div>
-            <div className='space-y-2'>
-              <h4 className='font-medium'>Chart Components</h4>
-              <ul className='space-y-1 text-gray-600'>
-                <li>
-                  ✅ Loan Distribution:{' '}
-                  {data.loanDistribution.length > 0 ? 'Has Data' : 'No Data'}
-                </li>
-                <li>
-                  ✅ Default Risk:{' '}
-                  {data.defaultRiskAnalysis.length > 0 ? 'Has Data' : 'No Data'}
-                </li>
-                <li>
-                  ✅ Credit Trends:{' '}
-                  {data.creditAmountTrends.length > 0 ? 'Has Data' : 'No Data'}
-                </li>
-                <li>
-                  ✅ Demographics:{' '}
-                  {data.applicantDemographics.length > 0
-                    ? 'Has Data'
-                    : 'No Data'}
-                </li>
-                <li>
-                  ✅ Payment Behavior:{' '}
-                  {data.paymentBehavior.length > 0 ? 'Has Data' : 'No Data'}
-                </li>
-              </ul>
-            </div>
-            <div className='space-y-2'>
-              <h4 className='font-medium'>UI Elements</h4>
-              <ul className='space-y-1 text-gray-600'>
-                <li>✅ Responsive Design: Working</li>
-                <li>✅ Icons & Styling: Working</li>
-                <li>✅ Interactive Elements: Working</li>
-              </ul>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Footer */}
       <div className='py-4 text-center text-sm text-gray-500'>
         Dashboard updated: {new Date().toLocaleString()}
-        {executionTime && ` • Load time: ${executionTime}`} • Source:{' '}
-        {source.toUpperCase()}
       </div>
     </div>
   );
